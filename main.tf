@@ -169,7 +169,7 @@ resource "aws_security_group" "lambda_sg" {
 
 
 
-#App SG (placeholder sg-xxxxxxxx) → assigned to your application (EC2, ECS, or Lambda)
+#App SG Lambda group
 #│
 #└─ RDS SG: rds-postgres-sg 
 #   - Ingress: TCP 5432 from App SG
