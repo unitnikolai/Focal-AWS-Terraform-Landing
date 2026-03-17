@@ -1,4 +1,32 @@
 #Cognito user pool
+resource "aws_s3_bucket" "terraform_state" {
+  bucket = "focal-terraform-state-bucket"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_s3_bucket_versioning" "state_versioning" {
+  bucket = aws_s3_bucket.terraform_state.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# terraform {
+#   required_version = ">= 1.0"
+# }
+
+terraform {
+  backend "s3" {
+    bucket         = "focal-terraform-state-bucket"
+    key            = "global/terraform.tfstate"
+    region         = "us-east-2"
+    encrypt        = true
+  }
+}
 
 resource "aws_cognito_user_pool" "main" {
     name = "focal-user-pool"
@@ -33,6 +61,9 @@ resource "aws_cognito_user_pool" "main" {
         attribute_data_type      = "String"
         required                 = true
         mutable                  = true
+    }
+    lambda_config{
+        post_confirmation = aws_lambda_function.post_confirmation.arn
     }
 }
 
@@ -115,11 +146,11 @@ resource "aws_kms_alias" "rds_key"{
 #└─ Private Subnet 2 (10.0.16.0/20) → AZ = reader_az (us-east-1b)
 
 variable "writer_az" {
-  default = "us-east-1a"
+  default = "us-east-2b"
 }
 
 variable "reader_az" {
-  default = "us-east-1b"
+  default = "us-east-2a"
 }
 
 variable "db_username" {
@@ -225,7 +256,7 @@ resource "aws_db_instance" "writer" {
     vpc_security_group_ids = [aws_security_group.db_sg.id]
     publicly_accessible    = false
 
-    backup_retention_period = 7
+    backup_retention_period = 0
     skip_final_snapshot     = true
 
     storage_encrypted = true
@@ -240,21 +271,21 @@ resource "aws_db_instance" "writer" {
     }
 }
 
-resource "aws_db_instance" "reader" {
-  identifier             = "app-db-reader"
-  engine                 = "postgres"
-  instance_class         = "db.t4g.micro"
-  replicate_source_db    = aws_db_instance.writer.id
-  
-  availability_zone = var.reader_az
-  db_subnet_group_name   = aws_db_subnet_group.db_subnets.name
-  vpc_security_group_ids = [aws_security_group.db_sg.id]
-  publicly_accessible    = false
+#resource "aws_db_instance" "reader" {
+#  identifier             = "app-db-reader"
+#  engine                 = "postgres"
+#  instance_class         = "db.t4g.micro"
+#  replicate_source_db    = aws_db_instance.writer.arn
 
-  storage_encrypted = true
-  kms_key_id        = aws_kms_key.rds_dbs_key.arn
+#  availability_zone = var.reader_az
+#  db_subnet_group_name   = aws_db_subnet_group.db_subnets.name
+#  vpc_security_group_ids = [aws_security_group.db_sg.id]
+#  publicly_accessible    = false
+#  backup_retention_period = 0
+#  storage_encrypted = true
+#  kms_key_id        = aws_kms_key.rds_dbs_key.arn
 
-  tags = {
-    Name = "App PostgreSQL Reader"
-  }
-}
+#  tags = {
+#    Name = "App PostgreSQL Reader"
+#  }
+#}
