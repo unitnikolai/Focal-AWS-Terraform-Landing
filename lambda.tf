@@ -22,7 +22,6 @@ resource "aws_lambda_permission" "cognito_post_confirmation" {
 
   principal = "cognito-idp.amazonaws.com"
 
-  source_arn = aws_cognito_user_pool.main.arn
 }
 
 resource "aws_iam_role_policy_attachment" "lambda_vpc" {
@@ -43,7 +42,7 @@ resource "aws_lambda_function" "post_confirmation" {
     subnet_ids         = aws_subnet.private[*].id
     security_group_ids = [aws_security_group.lambda_sg.id]
   }
-  
+
   lifecycle {
     ignore_changes = [
       filename,
