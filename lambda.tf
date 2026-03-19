@@ -33,7 +33,7 @@ resource "aws_lambda_function" "post_confirmation" {
   function_name = "cognito-post-confirmation"
 
   runtime = "nodejs20.x"
-  handler = "index.handler"
+  handler = "postconfirmation.handler"
   filename = "lambdas.zip"
   source_code_hash = filebase64sha256("lambdas.zip")
   role = aws_iam_role.lambda_role.arn

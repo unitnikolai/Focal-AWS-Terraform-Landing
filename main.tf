@@ -120,8 +120,8 @@ resource "aws_cognito_user_pool_client" "client"{
     }
 
     # Secure callback and logout URLs (use HTTPS in production)
-    callback_urls = ["http://localhost:3000/", "https://main.deu6lm3uucumx.amplifyapp.com/"]
-    logout_urls = ["http://localhost:3000/", "https://main.deu6lm3uucumx.amplifyapp.com/"]
+    callback_urls = ["http://localhost:3000/oauth2/callback", "https://main.deu6lm3uucumx.amplifyapp.com/oauth2/callback", "${aws_apigatewayv2_api.auth.api_endpoint}/oauth2/callback",]
+    logout_urls = ["http://localhost:3000/", "https://main.deu6lm3uucumx.amplifyapp.com/", aws_apigatewayv2_api.auth.api_endpoint,]
 
     # Cookie settings for secure token storage
     prevent_user_existence_errors = "ENABLED"
