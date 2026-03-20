@@ -54,7 +54,10 @@ resource "aws_lambda_function" "post_confirmation" {
   environment {
     variables = {
       DB_USER = var.db_username
-      DB_PASS = var.db_password
+      DB_PASSWORD = var.db_password
+      DB_NAME = "focal_db_1"
+      DB_HOST = "app-db-writer.cr2244yo4wbf.us-east-2.rds.amazonaws.com"
+      DB_SECRET_ID = "prod/focal_rds_1"
     }
   }
 } 

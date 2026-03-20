@@ -95,7 +95,7 @@ resource "aws_apigatewayv2_api" "auth" {
     }
 }
 
-resource "aws_apigatwayv2_stage" "default" {
+resource "aws_apigatewayv2_stage" "default" {
     api_id = aws_apigatewayv2_api.auth.id
     name = "$default"
     auto_deploy = true
