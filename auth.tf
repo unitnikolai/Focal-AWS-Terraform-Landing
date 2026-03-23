@@ -35,10 +35,6 @@ resource "aws_lambda_function" "oauth2_callback" {
     role = aws_iam_role.auth_lambda_exec.arn
     timeout = 10
     filename = "lambdas.zip"
-    vpc_config {
-        subnet_ids = local.private_subnet_ids
-        security_group_ids = [aws_security_group.lambda_sg.id]
-    }
     environment {
         variables = {
             COGNITO_DOMAIN    = local.cognito_domain
@@ -60,13 +56,9 @@ resource "aws_lambda_function" "oauth2_authorizer" {
     role = aws_iam_role.auth_lambda_exec.arn
     timeout = 10
     filename = "lambdas.zip"
-    vpc_config {
-      subnet_ids = local.private_subnet_ids
-      security_group_ids = [aws_security_group.lambda_sg.id]
-    }
     environment {
       variables = {
-        USER_POOL_ID = local.cognito_user_pool_id
+        COGNITO_USER_POOL_ID = local.cognito_user_pool_id
         COGNITO_CLIENT_ID = local.cognito_client_id
       }
     }
@@ -75,6 +67,63 @@ resource "aws_lambda_function" "oauth2_authorizer" {
     }
 }
 
+resource "aws_lambda_function" "auth_login"{
+    function_name = "authLogin"
+    runtime = "nodejs20.x"
+    architectures = ["arm64"]
+    handler = "index.handler"
+    role = aws_iam_role.auth_lambda_exec.arn
+    timeout = 10
+    filename = "lambdas.zip"
+
+    environment {
+      variables = {
+        COGNITO_CLIENT_ID = local.cognito_client_id
+      }
+    }
+    lifecycle {
+      ignore_changes = [ filename, source_code_hash, last_modified ]
+    }
+}
+
+resource "aws_lambda_function" "auth_refresh"{
+  function_name = "authRefresh"
+  runtime = "nodejs20.x"
+  architectures = ["arm64"]
+  handler = "index.handler"
+  role = aws_iam_role.auth_lambda_exec.arn
+  timeout = 10
+  filename = "lambdas.zip"
+
+  environment {
+    variables = {
+      COGNITO_CLIENT_ID = local.cognito_client_id
+    }
+  }
+  lifecycle {
+    ignore_changes = [ filename, source_code_hash, last_modified ]
+  }
+}
+resource "aws_lambda_permission" "auth_refresh_apigw" {
+  statement_id  = "AllowAPIGatewayRefresh"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.auth_refresh.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.auth.execution_arn}/*/*"
+}
+
+resource "aws_apigatewayv2_integration" "auth_refresh" {
+  api_id                 = aws_apigatewayv2_api.auth.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.auth_refresh.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "auth_refresh" {
+  api_id    = aws_apigatewayv2_api.auth.id
+  route_key = "POST /auth/refresh"
+  target    = "integrations/${aws_apigatewayv2_integration.auth_refresh.id}"
+}
 resource "aws_lambda_permission" "oauth2_authorizer_apigw"{
     statement_id  = "AllowAPIGatewayAuthorizer"
     action        = "lambda:InvokeFunction"
@@ -83,13 +132,34 @@ resource "aws_lambda_permission" "oauth2_authorizer_apigw"{
     source_arn    = "${aws_apigatewayv2_api.auth.execution_arn}/*/*"
 }
 
+resource "aws_lambda_permission" "auth_login_apigw" {
+  statement_id  = "AllowAPIGatewayLogin"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.auth_login.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.auth.execution_arn}/*/*"
+}
+
+resource "aws_apigatewayv2_integration" "auth_login" {
+  api_id                 = aws_apigatewayv2_api.auth.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.auth_login.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "auth_login" {
+  api_id    = aws_apigatewayv2_api.auth.id
+  route_key = "POST /auth/login"
+  target    = "integrations/${aws_apigatewayv2_integration.auth_login.id}"
+}
+
 resource "aws_apigatewayv2_api" "auth" {
     name = "focal-auth-api"
     protocol_type = "HTTP"
     cors_configuration {
       allow_origins = [local.app_url, "http://localhost:3000"]
       allow_methods = ["GET", "POST", "OPTIONS"]
-      allow_headers = ["content=type", "x-csrd-token"]
+      allow_headers = ["content-type", "x-csrfs-token"]
       allow_credentials = true
       max_age = 300
     }
