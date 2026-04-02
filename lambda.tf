@@ -62,3 +62,23 @@ resource "aws_lambda_function" "post_confirmation" {
   }
 } 
 
+resource "aws_lambda_function" "pull_profile"{
+  function_name = "lambda-pull_profile"
+  runtime = "nodejs20.x"
+  architectures = ["arm64"]
+  handler = "index.handler"
+  role = aws_iam_role.auth_lambda_exec.arn
+  timeout = 10
+  filename = "lambas.zip"
+  environment {
+    variables = {
+      COGNITO_DOMAIN    = local.cognito_domain
+      COGNITO_CLIENT_ID = local.cognito_client_id
+      CALLBACK_URL      = local.callback_url
+      APP_URL           = local.app_url
+    }
+  }
+  lifecycle {
+    ignore_changes = [ filename, source_code_hash, last_modified ]
+  }
+}
