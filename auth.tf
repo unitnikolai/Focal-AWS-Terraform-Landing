@@ -1,5 +1,5 @@
 locals {
-  cognito_domain       = "https://focal-auth-portal.auth.us-east-2.amazoncognito.com"
+  cognito_domain       = "focal-auth-portal.auth.us-east-2.amazoncognito.com"
   cognito_client_id    = aws_cognito_user_pool_client.client.id
   cognito_user_pool_id = aws_cognito_user_pool.main.id
   app_url              = "https://main.deu6lm3uucumx.amplifyapp.com"
@@ -140,6 +140,14 @@ resource "aws_lambda_permission" "auth_login_apigw" {
   source_arn    = "${aws_apigatewayv2_api.auth.execution_arn}/*/*"
 }
 
+resource "aws_lambda_permission" "oauth2_callback_apigw" {
+  statement_id = "AllowAPIGatewayOAuth2Callback"
+  action       = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.oauth2_callback.function_name
+  principal    = "apigateway.amazonaws.com"
+  source_arn   = "${aws_apigatewayv2_api.auth.execution_arn}/*/*"
+}
+
 resource "aws_apigatewayv2_integration" "auth_login" {
   api_id                 = aws_apigatewayv2_api.auth.id
   integration_type       = "AWS_PROXY"
@@ -159,7 +167,7 @@ resource "aws_apigatewayv2_api" "auth" {
     cors_configuration {
       allow_origins = [local.app_url, "http://localhost:3000"]
       allow_methods = ["GET", "POST", "OPTIONS"]
-      allow_headers = ["content-type", "x-csrfs-token"]
+      allow_headers = ["content-type", "x-csrf-token"]
       allow_credentials = true
       max_age = 300
     }

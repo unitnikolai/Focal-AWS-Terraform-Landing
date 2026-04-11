@@ -1,5 +1,5 @@
 resource "aws_iam_role" "lambda_role" {
-  name = "post-confirmation-lambda-role"
+  name = "lambda-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -14,10 +14,11 @@ resource "aws_iam_role" "lambda_role" {
     ]
   })
 }
+
 resource "aws_lambda_permission" "cognito_post_confirmation" {
   statement_id  = "AllowCognitoInvoke"
   action        = "lambda:InvokeFunction"
-
+  source_arn = aws_cognito_user_pool.main.arn
   function_name = aws_lambda_function.post_confirmation.arn
 
   principal = "cognito-idp.amazonaws.com"
@@ -27,6 +28,25 @@ resource "aws_lambda_permission" "cognito_post_confirmation" {
 resource "aws_iam_role_policy_attachment" "lambda_vpc" {
   role       = aws_iam_role.lambda_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_basic" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "lambda_secrets" {
+  name = "secrets-manager-access"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "secretsmanager:GetSecretValue"
+      Resource = "arn:aws:secretsmanager:us-east-2:*:secret:prod/focal_rds_1-*"
+    }]
+  })
 }
 
 resource "aws_lambda_function" "post_confirmation" {
@@ -62,23 +82,113 @@ resource "aws_lambda_function" "post_confirmation" {
   }
 } 
 
-resource "aws_lambda_function" "pull_profile"{
-  function_name = "lambda-pull_profile"
+resource "aws_lambda_function" "organization-handle" {
+  function_name = "organization-handle"
   runtime = "nodejs20.x"
-  architectures = ["arm64"]
   handler = "index.handler"
-  role = aws_iam_role.auth_lambda_exec.arn
+  filename = "lambdas.zip"
+  source_code_hash = filebase64sha256("lambdas.zip")
+  role = aws_iam_role.lambda_role.arn
   timeout = 10
-  filename = "lambas.zip"
+
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.lambda_sg.id]
+  }
+
+  lifecycle {
+    ignore_changes = [
+      filename,
+      source_code_hash,
+      s3_bucket,
+      s3_key
+    ]
+  }
   environment {
     variables = {
-      COGNITO_DOMAIN    = local.cognito_domain
-      COGNITO_CLIENT_ID = local.cognito_client_id
-      CALLBACK_URL      = local.callback_url
-      APP_URL           = local.app_url
+      DB_NAME = "focal_db_1"
+      DB_HOST = "app-db-writer.cr2244yo4wbf.us-east-2.rds.amazonaws.com"
+      DB_SECRET_ID = "prod/focal_rds_1"
     }
   }
-  lifecycle {
-    ignore_changes = [ filename, source_code_hash, last_modified ]
-  }
+} 
+
+resource "aws_apigatewayv2_integration" "organization-handle" {
+  api_id                 = aws_apigatewayv2_api.auth.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.organization-handle.invoke_arn
+  payload_format_version = "2.0"
 }
+
+resource "aws_apigatewayv2_route" "organization-handle" {
+  api_id    = aws_apigatewayv2_api.auth.id
+  route_key = "POST /organization/join"
+  target    = "integrations/${aws_apigatewayv2_integration.organization-handle.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.oauth2.id
+  authorization_type = "CUSTOM"
+}
+
+resource "aws_lambda_permission" "apigw_organization-handle" {
+  statement_id  = "AllowAPIGatewayOrganizationHandle"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.organization-handle.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.auth.execution_arn}/*/*"
+}
+
+//Lambda for group selector
+
+resource "aws_lambda_function" "group-selector" {
+  function_name = "group-selector"
+  runtime = "nodejs20.x"
+  handler = "index.handler"
+  filename = "lambdas.zip"
+  source_code_hash = filebase64sha256("lambdas.zip")
+  role = aws_iam_role.lambda_role.arn
+  timeout = 10
+
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.lambda_sg.id]
+  }
+
+  lifecycle {
+    ignore_changes = [
+      filename,
+      source_code_hash,
+      s3_bucket,
+      s3_key
+    ]
+  }
+  environment {
+    variables = {
+      DB_NAME = "focal_db_1"
+      DB_HOST = "app-db-writer.cr2244yo4wbf.us-east-2.rds.amazonaws.com"
+      DB_SECRET_ID = "prod/focal_rds_1"
+    }
+  }
+} 
+
+resource "aws_apigatewayv2_integration" "group-selector" {
+  api_id                 = aws_apigatewayv2_api.auth.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.organization-handle.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "group-selector" {
+  api_id    = aws_apigatewayv2_api.auth.id
+  route_key = "POST /organization/join-group"
+  target    = "integrations/${aws_apigatewayv2_integration.organization-handle.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.oauth2.id
+  authorization_type = "CUSTOM"
+}
+
+resource "aws_lambda_permission" "apigw_group-selector" {
+  statement_id  = "AllowAPIGatewayGroupSelector"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.group-selector.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.auth.execution_arn}/*/*"
+}
+

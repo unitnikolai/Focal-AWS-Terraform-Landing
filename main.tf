@@ -9,16 +9,13 @@ resource "aws_s3_bucket" "terraform_state" {
 
 resource "aws_s3_bucket_versioning" "state_versioning" {
   bucket = aws_s3_bucket.terraform_state.id
-
   versioning_configuration {
     status = "Enabled"
   }
 }
-
 # terraform {
 #   required_version = ">= 1.0"
 # }
-
 terraform {
   backend "s3" {
     bucket         = "focal-terraform-state-bucket"
@@ -289,3 +286,43 @@ resource "aws_db_instance" "writer" {
 #    Name = "App PostgreSQL Reader"
 #  }
 #}
+
+
+resource "aws_dynamodb_table" "mdm_sessions" {
+    name = "focal-sessions-table"
+    billing_mode = "PAY_PER_REQUEST"
+    hash_key = "session_id"
+    
+
+    attribute {
+        name = "session_id"
+        type = "S"
+        
+    }
+
+    tags = {
+        Name = "MDM Sessions Table"
+    }
+}
+
+resource "aws_vpc_endpoint" "secretsmanager" {
+  vpc_id              = aws_vpc.app_vpc.id
+  service_name        = "com.amazonaws.us-east-2.secretsmanager"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpce_sg.id]
+  private_dns_enabled = true
+}
+
+resource "aws_security_group" "vpce_sg" {
+  name   = "vpce-secretsmanager-sg"
+  vpc_id = aws_vpc.app_vpc.id
+
+  ingress {
+    description     = "HTTPS from Lambda"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lambda_sg.id]
+  }
+}
