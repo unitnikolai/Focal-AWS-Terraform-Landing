@@ -288,23 +288,6 @@ resource "aws_db_instance" "writer" {
 #}
 
 
-resource "aws_dynamodb_table" "mdm_sessions" {
-    name = "focal-sessions-table"
-    billing_mode = "PAY_PER_REQUEST"
-    hash_key = "session_id"
-    
-
-    attribute {
-        name = "session_id"
-        type = "S"
-        
-    }
-
-    tags = {
-        Name = "MDM Sessions Table"
-    }
-}
-
 resource "aws_vpc_endpoint" "secretsmanager" {
   vpc_id              = aws_vpc.app_vpc.id
   service_name        = "com.amazonaws.us-east-2.secretsmanager"
