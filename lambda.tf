@@ -49,6 +49,30 @@ resource "aws_iam_role_policy" "lambda_secrets" {
   })
 }
 
+resource "aws_iam_role_policy" "lambda_dynamodb" {
+  name = "dynamodb-access"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan"
+      ]
+      Resource = [
+        aws_dynamodb_table.mdm_sessions.arn,
+        "${aws_dynamodb_table.mdm_sessions.arn}/index/*"
+      ]
+    }]
+  })
+}
+
 resource "aws_lambda_function" "post_confirmation" {
   function_name = "cognito-post-confirmation"
 
