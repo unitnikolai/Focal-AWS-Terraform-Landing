@@ -145,6 +145,7 @@ resource "aws_lambda_function" "get-sessions" {
   environment {
     variables = {
       SESSIONS_TABLE = aws_dynamodb_table.mdm_sessions.name
+      MEMBERSHIP_TABLE = aws_dynamodb_table.membership.name
     }
   }
 }
@@ -251,7 +252,8 @@ resource "aws_lambda_function" "update-session" {
 
   environment {
     variables = {
-      SESSIONS_TABLE = aws_dynamodb_table.mdm_sessions.name
+      SESSIONS_TABLE   = aws_dynamodb_table.mdm_sessions.name
+      MEMBERSHIP_TABLE = aws_dynamodb_table.membership.name
     }
   }
 }
@@ -323,7 +325,7 @@ resource "aws_appsync_graphql_api" "dashboard"{
   }
 
   schema = <<EOF
-  type Session {
+  type Session @aws_iam @aws_cognito_user_pools {
     session_id: ID!
     user_id: String!
     full_name: String
@@ -341,11 +343,11 @@ resource "aws_appsync_graphql_api" "dashboard"{
       user_id: String!
       full_name: String
       org_id: String!
-      group_id: String!
+      group_id: String
       device_name: String 
-      status: String!
-      status_since: String!
-      created_at: String!
+      status: String
+      status_since: String
+      created_at: String
       ttl: Int
       ): Session @aws_iam
   }
