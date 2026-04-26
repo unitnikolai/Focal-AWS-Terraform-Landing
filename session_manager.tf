@@ -337,6 +337,11 @@ resource "aws_appsync_graphql_api" "dashboard"{
     status_since: String
     ttl: Int
   }
+  type DeviceCommand @aws_cognito_user_pools {
+    session_id: ID!
+    command: String!
+    org_id: String!
+  }
   type Mutation {
     publishSessionUpdate(
       session_id: ID!
@@ -349,11 +354,17 @@ resource "aws_appsync_graphql_api" "dashboard"{
       status_since: String
       created_at: String
       ttl: Int
-      ): Session @aws_iam
+    ): Session @aws_iam
+    publishDeviceCommand(
+      session_id: ID!
+      org_id: String!
+    ): DeviceCommand @aws_cognito_user_pools
   }
   type Subscription {
     onSessionUpdated(org_id: String!): Session
       @aws_subscribe(mutations: ["publishSessionUpdate"])
+    onDeviceCommand(session_id: ID!): DeviceCommand
+      @aws_subscribe(mutations: ["publishDeviceCommand"])
   }
   type Query{
     _empty: String
@@ -384,11 +395,14 @@ resource "aws_iam_role_policy" "appsync_dynamo" {
       Effect = "Allow"
       Action = [
         "dynamodb:GetItem",
-        "dynamodb:Query"
+        "dynamodb:Query",
+        "dynamodb:UpdateItem"
       ]
       Resource = [
         aws_dynamodb_table.membership.arn,
-        "${aws_dynamodb_table.membership.arn}/index/*"
+        "${aws_dynamodb_table.membership.arn}/index/*",
+        aws_dynamodb_table.mdm_sessions.arn,
+        "${aws_dynamodb_table.mdm_sessions.arn}/index/*"
       ]
     }]
   })
@@ -401,6 +415,19 @@ resource "aws_appsync_datasource" "membership_table" {
 
   dynamodb_config {
     table_name = aws_dynamodb_table.membership.name
+    region     = "us-east-2"
+  }
+
+  service_role_arn = aws_iam_role.appsync_role.arn
+}
+
+resource "aws_appsync_datasource" "sessions_table" {
+  api_id           = aws_appsync_graphql_api.dashboard.id
+  name             = "SessionsTable"
+  type             = "AMAZON_DYNAMODB"
+
+  dynamodb_config {
+    table_name = aws_dynamodb_table.mdm_sessions.name
     region     = "us-east-2"
   }
 
@@ -438,4 +465,65 @@ resource "aws_appsync_resolver" "on_session_updated" {
   }
 
   code = file("resolvers/on_event_published.js")
+}
+
+resource "aws_appsync_resolver" "publish_device_command" {
+  api_id = aws_appsync_graphql_api.dashboard.id
+  type   = "Mutation"
+  field  = "publishDeviceCommand"
+  kind   = "PIPELINE"
+
+  runtime {
+    name            = "APPSYNC_JS"
+    runtime_version = "1.0.0"
+  }
+
+  code = file("resolvers/publish_device_command.js")
+
+  pipeline_config {
+    functions = [
+      aws_appsync_function.check_admin.function_id,
+      aws_appsync_function.update_session_status.function_id,
+    ]
+  }
+}
+
+resource "aws_appsync_function" "check_admin" {
+  api_id      = aws_appsync_graphql_api.dashboard.id
+  name        = "CheckAdmin"
+  data_source = aws_appsync_datasource.membership_table.name
+
+  runtime {
+    name            = "APPSYNC_JS"
+    runtime_version = "1.0.0"
+  }
+
+  code = file("resolvers/check_admin.js")
+}
+
+resource "aws_appsync_function" "update_session_status" {
+  api_id      = aws_appsync_graphql_api.dashboard.id
+  name        = "UpdateSessionStatus"
+  data_source = aws_appsync_datasource.sessions_table.name
+
+  runtime {
+    name            = "APPSYNC_JS"
+    runtime_version = "1.0.0"
+  }
+
+  code = file("resolvers/update_session_status.js")
+}
+
+resource "aws_appsync_resolver" "on_device_command" {
+  api_id      = aws_appsync_graphql_api.dashboard.id
+  type        = "Subscription"
+  field       = "onDeviceCommand"
+  data_source = aws_appsync_datasource.none.name
+
+  runtime {
+    name            = "APPSYNC_JS"
+    runtime_version = "1.0.0"
+  }
+
+  code = file("resolvers/on_device_command.js")
 }

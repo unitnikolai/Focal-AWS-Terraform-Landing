@@ -86,6 +86,52 @@ resource "aws_lambda_function" "auth_login"{
     }
 }
 
+resource "aws_lambda_function" "auth_forgot_password" {
+  function_name = "authForgotPassword"
+  runtime       = "nodejs20.x"
+  architectures = ["arm64"]
+  handler       = "index.handler"
+  role          = aws_iam_role.auth_lambda_exec.arn
+  timeout       = 10
+  filename      = "lambdas.zip"
+
+  environment {
+    variables = {
+      COGNITO_CLIENT_ID = local.cognito_client_id
+    }
+  }
+  lifecycle {
+    ignore_changes = [filename, source_code_hash, last_modified]
+  }
+}
+
+resource "aws_lambda_permission" "auth_forgot_password_apigw" {
+  statement_id  = "AllowAPIGatewayForgotPassword"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.auth_forgot_password.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.auth.execution_arn}/*/*"
+}
+
+resource "aws_apigatewayv2_integration" "auth_forgot_password" {
+  api_id                 = aws_apigatewayv2_api.auth.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.auth_forgot_password.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "auth_forgot_password" {
+  api_id    = aws_apigatewayv2_api.auth.id
+  route_key = "POST /auth/forgot-password"
+  target    = "integrations/${aws_apigatewayv2_integration.auth_forgot_password.id}"
+}
+
+resource "aws_apigatewayv2_route" "auth_confirm_forgot_password" {
+  api_id    = aws_apigatewayv2_api.auth.id
+  route_key = "POST /auth/confirm-forgot-password"
+  target    = "integrations/${aws_apigatewayv2_integration.auth_forgot_password.id}"
+}
+
 resource "aws_lambda_function" "auth_refresh"{
   function_name = "authRefresh"
   runtime = "nodejs20.x"
