@@ -211,7 +211,7 @@ resource "aws_apigatewayv2_api" "auth" {
     name = "focal-auth-api"
     protocol_type = "HTTP"
     cors_configuration {
-      allow_origins = [local.app_url, "http://localhost:3000"]
+      allow_origins = [local.app_url, "http://localhost:3000", "https://dashboard.focaltech.site"]
       allow_methods = ["GET", "POST", "OPTIONS"]
       allow_headers = ["content-type", "x-csrf-token"]
       allow_credentials = true

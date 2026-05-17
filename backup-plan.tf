@@ -27,7 +27,7 @@ resource "aws_backup_plan" "usertable_backup_plan"{
         rule_name = "dynamodb_usertable_backup_rule"
         target_vault_name = aws_backup_vault.backup_vault.name
         schedule = "cron(0 12 * * ? *)" # Daily at 12:00 PM UTC
-
+        
         lifecycle {
           delete_after = 14
         }

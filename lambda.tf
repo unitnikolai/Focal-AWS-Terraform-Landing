@@ -334,3 +334,14 @@ resource "aws_lambda_function" "sync_rds_admins" {
     }
   }
 }
+
+# resource "aws_api_gatewayv2_stage" "default"{
+#   api_id = aws_apigatewayv2_api.auth.id
+#   name = "$default"
+#   auto_deploy = true
+
+#   default route_settings {
+#     throttling_burst_limit = 150
+#     throttling_rate_limit  = 100
+#   }
+# }
